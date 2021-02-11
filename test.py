@@ -1,3 +1,4 @@
+import sys
 import whois
 
 DOMAINS = '''
@@ -89,89 +90,51 @@ DOMAINS = '''
     google.ca
     google.mu
     google.rw
-'''
-
-failure = list()
-
-# domains = ''
-
-invalidTld = '''
     bit.ly
-'''
-
-failedParsing = '''
-'''
-
-unknownDateFormat = '''
     gopro.com
 '''
 
-for d in DOMAINS.split('\n'):
-    if d:
-        print('-'*80)
-        print(d)
+def test_domain(domain):
+    print('-'*80)
+    print(domain)
+
+    w = whois.query(domain, ignore_returncode=1)
+
+    if w:
+        for k, v in w.__dict__.items():
+            print('%20s\t%s' % (k, v))
+
+    else:
+        print('no result')
+
+
+def do_complete_test():
+    failures = list()
+
+    all_domains = sorted(filter(None, {d.strip() for d in DOMAINS.split('\n')}))
+
+    for d in all_domains:
         try:
-            w = whois.query(d, ignore_returncode=1)
-            if w:
-                wd = w.__dict__
-                for k, v in wd.items():
-                    print('%20s\t"%s"' % (k, v))
-        except Exception as e:
-            failure.append(d)
-            message = """
-            Error : {},
-            On Domain: {}
-            """.format(str(e),d)
+            test_domain(d)
 
-for d in invalidTld.split('\n'):
-    if d:
-        print('-'*80)
-        print(d)
-        try:
-            w = whois.query(d, ignore_returncode=1)
-        except whois.UnknownTld as e:
-            failure.append(d)
-            message = """
-            Error : {},
-            On Domain: {}
-            """.format(str(e),d)
-            print('Caught UnknownTld Exception')
-            print(e)
+        except whois.WHOISException as e:
+            failures.append(d)
+            print(f"""
+            Error : {e},
+            Domain: {d}
+            """)
 
-for d in failedParsing.split('\n'):
-    if d:
-        print('-'*80)
-        print(d)
-        try:
-            w = whois.query(d, ignore_returncode=1)
-        except whois.FailedParsingWhoisOutput as e:
-            failure.append(d)
-            message = """
-            Error : {},
-            On Domain: {}
-            """.format(str(e),d)
-            print('Caught FailedParsingWhoisOutput Exception')
-            print(e)
+    report_str = f"""
+    Failures: {len(failures)}
+    Domains : {failures}
+    """
 
-for d in unknownDateFormat.split('\n'):
-    if d:
-        print('-'*80)
-        print(d)
-        try:
-            w = whois.query(d, ignore_returncode=1)
-        except whois.UnknownDateFormat as e:
-            failure.append(d)
-            message = """
-            Error : {},
-            On Domain: {}
-            """.format(str(e),d)
-            print('Caught UnknownDateFormat Exception')
-            print(e)
+    print('\033[91m' + report_str + '\x1b[0m')
 
 
-report_str = """
-Failure during test : {}
-Domains : {}
-""".format(len(failure),failure)
-message = '\033[91m' + report_str + '\x1b[0m'
-print(message)
+if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        domain = sys.argv[1]
+        test_domain(domain)
+    else:
+        do_complete_test()
