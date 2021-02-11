@@ -1,48 +1,38 @@
 import re
 import sys
 import datetime
-from .exceptions import UnknownDateFormat
+from .exceptions import WHOISUnknownDateFormat
 
 PYTHON_VERSION = sys.version_info[0]
 
 
-class Domain:
+def clean_statuses(statuses):
+    return list({
+        s.strip() for s in statuses
+    })
 
-    def __init__(self, data):
-        self.name = data['domain_name'][0].strip().lower()
-        self.registrar = data['registrar'][0].strip()
-        self.registrant_country = data['registrant_country'][0].strip()
-        self.creation_date = str_to_date(data['creation_date'][0])
-        self.expiration_date = str_to_date(data['expiration_date'][0])
-        self.last_updated = str_to_date(data['updated_date'][0])
-        self.status = data['status'][0].strip()
-        self.statuses = list(set([s.strip() for s in data['status']])) # list(set(...))) to deduplicate
-        self.dnssec = data['DNSSEC']
-        
-        # name_servers
-        tmp = []
 
-        for x in data['name_servers']:
-            if isinstance(x, str):
-                tmp.append(x)
-            else:
-                for y in x:
-                    tmp.append(y)
+def clean_nameservers(nameservers):
+    tmp = []
 
-        self.name_servers = set()
+    # flatmap?
+    for ns in nameservers:
+        if isinstance(ns, str):
+            tmp.append(ns)
+        else:
+            tmp.extend(ns)
 
-        for x in tmp:
-            x = x.strip(' .')
+    results = set()
 
-            if x:
-                if ' ' in x:
-                    x, _ = x.split(' ', 1)
-                    x = x.strip(' .')
+    for x in tmp:
+        if ' ' in x:
+            x, _ = x.split(' ', 1)
 
-                self.name_servers.add(x.lower())
+        x = x.strip().strip(' .').rstrip('.')
 
-        if 'owner' in data:
-            self.owner = data['owner'][0].strip()
+        results.add(x.lower())
+
+    return results
 
 
 # http://docs.python.org/library/datetime.html#strftime-strptime-behavior
@@ -96,47 +86,37 @@ def str_to_date(text):
         return
 
     text = text.replace('(jst)', '(+0900)')
-    text = re.sub('(\+[0-9]{2}):([0-9]{2})', '\\1\\2', text)
-    text = re.sub('(\+[0-9]{2})$', '\\1:00', text)
-    text = re.sub('(\ #.*)', '', text)
+    text = re.sub(r'(\+[0-9]{2}):([0-9]{2})', '\\1\\2', text)
+    text = re.sub(r'(\+[0-9]{2})$', '\\1:00', text)
+    text = re.sub(r'(\ #.*)', '', text)
+
     # hack for 1st 2nd 3rd 4th etc
     # better here https://stackoverflow.com/questions/1258199/python-datetime-strptime-wildcard
     text = re.sub(r"(\d+)(st|nd|rd|th) ", r"\1 ", text)
-    
-    if PYTHON_VERSION < 3:
-        return str_to_date_py2(text)
 
-    for format in DATE_FORMATS:
+    for fmt in DATE_FORMATS:
         try:
-            return datetime.datetime.strptime(text, format).astimezone().replace(tzinfo=None)
+            return datetime.datetime.strptime(text, fmt) \
+                                    .astimezone() \
+                                    .replace(tzinfo=None)
         except ValueError:
             pass
 
-    raise UnknownDateFormat("Unknown date format: '%s'" % text)
+    raise WHOISUnknownDateFormat("Unknown date format: '%s'" % text)
 
 
-def str_to_date_py2(text):
-    tmp = re.findall('\+([0-9]{2})00', text)
-    time_zone = 0
+class Domain:
+    def __init__(self, data):
+        self.name = data['domain_name'][0].strip().lower()
+        self.registrar = data['registrar'][0].strip()
+        self.registrant_country = data['registrant_country'][0].strip()
+        self.creation_date = str_to_date(data['creation_date'][0])
+        self.expiration_date = str_to_date(data['expiration_date'][0])
+        self.last_updated = str_to_date(data['updated_date'][0])
+        self.status = data['status'][0].strip()
+        self.statuses = clean_statuses(data['status'])
+        self.dnssec = data['DNSSEC']
+        self.nameservers = clean_nameservers(data['nameservers'])
 
-    if tmp:
-        time_zone = int(tmp[0])
-    else:
-        time_zone = 0
-    
-    del tmp
-    tmp = re.findall('\+([0-9]{2})$', text)
-
-    if tmp:
-        time_zone = int(tmp[0])
-        text = re.sub('(.*)(\+[0-9]{2})$', '\\1', text)
-    else:
-        time_zone = 0
-    
-    for format in DATE_FORMATS:
-        try:
-            return datetime.datetime.strptime(text, format) + datetime.timedelta(hours=time_zone)
-        except ValueError:
-            pass
-
-    raise UnknownDateFormat("Unknown date format: '%s'" % text)
+        if 'owner' in data:
+            self.owner = data['owner'][0].strip()
