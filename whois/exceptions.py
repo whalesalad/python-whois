@@ -1,14 +1,22 @@
-class UnknownTld(Exception):
+class WHOISException(Exception):
     pass
 
 
-class FailedParsingWhoisOutput(Exception):
+class WHOISUnsupportedTLD(WHOISException):
     pass
 
 
-class UnknownDateFormat(Exception):
+class WHOISParsingFailed(WHOISException):
     pass
 
 
-class WhoisCommandFailed(Exception):
+class WHOISUnknownDateFormat(WHOISException):
+    pass
+
+
+class WHOISCommandFailed(WHOISException):
+    pass
+
+
+class WHOISCommandTimeout(WHOISException):
     pass
